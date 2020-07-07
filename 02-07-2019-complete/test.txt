@@ -1,0 +1,16 @@
+-2$abbaaabbaabbaa;
+10000*10001*xxxxxxyyyyy;
+2019/09/21+2020/01/01-2020/January/01;
+%%
+INIT POWER 3KW - TIME 3 MIN;
+DEC POWER FZ[MIN](2,6,FZ[MAX](2,4)) KW;
+CASE TIME
+    RANGE 1 : 1560 DO
+      PRINT "In range time";
+    DONE
+    EQ 180 DO
+      PRINT "Equal time";
+    DONE
+ESAC
+
+INC TIME 1 MIN;

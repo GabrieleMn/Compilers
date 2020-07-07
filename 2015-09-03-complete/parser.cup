@@ -1,0 +1,206 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+init with {:
+    // Initialization of global hashamp
+    sym = new HashMap();
+:};
+
+parser code 	{:
+
+    public static HashMap sym;
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+
+    public void p(String message){
+      System.out.println(message);
+    }
+
+    public void pHash(HashMap h){
+    for (Object key : h.keySet()) {
+        System.out.print("["+key+" = ");
+        System.out.println(h.get(key)+"]");
+      }
+      System.out.print("\n\n");
+    }
+:};
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3;
+terminal String ID;
+terminal BO, BC, CM;
+terminal Integer NUMBER;
+terminal EQ, MS;
+terminal SEP;
+terminal FUN_NAME, RO, RC;
+terminal SC;
+terminal ARROW;
+terminal OR;
+terminal COL;
+terminal M_CHAR;
+terminal String PART_NAME;
+
+non terminal prog;
+non terminal header, token1_list;
+non terminal car_list, car;
+non terminal HashMap speed_list;
+non terminal String[] speed;
+non terminal race_section;
+non terminal min_max_list, function;
+non terminal Integer[] section_list;
+non terminal performance_list;
+non terminal performance;
+non terminal Integer part, parts_list;
+non terminal Integer stats_list, stat;
+non terminal String SHIFT0, NT0, NT1;
+
+
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog
+;
+
+prog ::= header SEP car_list SEP race_section {: parser.p("PROG RECOGNIZED!"); :}
+;
+
+header ::= token1_list TOKEN2 token1_list TOKEN3 token1_list |
+           token1_list TOKEN3 token1_list TOKEN2 token1_list
+;
+
+token1_list ::=   /*empty*/
+                | token1_list TOKEN1
+;
+
+////////////////////////////////////////
+//CAR SECTION
+////////////////////////////////////////
+
+car_list ::=    car car
+              | car_list car car
+;
+
+car ::= ID:a BO speed_list:b BC {: parser.sym.put(a,b); :}
+;
+
+speed_list ::=  speed:h {:
+                            HashMap partial_hash = new HashMap();
+                            partial_hash.put(h[0],new Integer(h[1]));
+                            RESULT = partial_hash;
+                        :}
+              | speed_list:a CM speed:b {:
+                                           a.put(b[0],new Integer(b[1]));
+                                           RESULT = a;
+                                        :}
+;
+
+speed ::= ID:a EQ NUMBER:b MS {:
+                                 RESULT = new String[2];
+                                 RESULT[0] = new String(a);
+                                 RESULT[1] = new String(b.toString());
+                              :}
+;
+
+////////////////////////////////////////
+//RACE SECTION
+////////////////////////////////////////
+
+race_section ::= min_max_list performance_list
+;
+
+min_max_list ::=    /*empty*/
+                 |  min_max_list function
+;
+
+function ::=  FUN_NAME RO ID RC RO section_list:res RC SC {:
+                                                              parser.p("MAX:"+res[0]+" MIN:"+res[1]);
+                                                           :}
+;
+
+section_list ::= ID:a {:
+                         String car = (String) parser.stack(-3);
+                         RESULT = new Integer[2];
+                         HashMap hash = (HashMap)parser.sym.get(car);
+                         RESULT[0] = (Integer)hash.get(a); //MAX
+                         RESULT[1] = (Integer)hash.get(a); //MIN
+                      :}
+                 | section_list:current CM ID:a {:
+                                                    String car = (String) parser.stack(-5);
+                                                    HashMap hash = (HashMap)parser.sym.get(car);
+                                                    Integer val = (Integer) hash.get(a);
+                                                    RESULT = new Integer[2];
+
+                                                    if(val>=(Integer)current[0])
+                                                        RESULT[0]=val;
+                                                    else
+                                                        RESULT[0] = (Integer)current[0];
+
+                                                    if(val<=(Integer)current[1])
+                                                        RESULT[1]=val;
+                                                    else
+                                                        RESULT[1]=(Integer)current[1];
+                                                 :}
+;
+
+performance_list ::= performance | performance_list performance
+;
+
+performance ::= ID:car ARROW parts_list:time SC {: parser.p("TOTAL:"+":"+time.toString()); :}
+;
+
+parts_list ::=  part:time {: RESULT =time; :}
+              | parts_list:time1 NT1 OR part:time2  {: RESULT =time1+time2; :}
+;
+
+NT1 ::= /*empty*/ {: RESULT = (String)parser.stack(-2); :}
+;
+
+//SHIFT0 is used to shift the car name before the first element of the part list
+part ::= PART_NAME:a COL SHIFT0:car stats_list:time {: RESULT = time; parser.p(a+":"+time.toString()+"s"); :}
+;
+
+SHIFT0 ::= /*empty*/ {:  RESULT = (String)parser.stack(-3); :}
+;
+
+stats_list ::=    stat:a {: RESULT = a; :}
+                | stats_list:a CM NT0 stat:b {: RESULT = a + b; :}
+;
+
+NT0 ::= /*empty*/ {: RESULT = (String)parser.stack(-2); :}
+;
+
+stat ::= ID:a NUMBER:b M_CHAR
+                              {:
+                                String car = (String)parser.stack(-3); //the second element will take the care name from NT0
+                                HashMap carHash= (HashMap)parser.sym.get(car);
+                                Integer speed = (Integer)carHash.get(a);
+                                RESULT = b/speed;
+                              :}
+;

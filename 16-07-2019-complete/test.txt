@@ -1,0 +1,27 @@
+??!!??&&????ab$cd$efhgi$lm;
+%2019/September/16$$$$;
+#BUBBLEBUBBLE-121;
+??!!??&&????ab$cd$efhgi$lm;
+%2019/September/16$$$$;
+??!!??&&????ab$cd$efhgi$lm;
+$$
+START 10.00;
+20190716 : DEF {x=true OR false; y=false; z=false;} ASSIGN TO bool_var;
+20190717 : IF true AND (false OR bool_var.x ) DEC 5.00;
+
+20190720 : CASE bool_var.y OR true {
+  EQ true {
+      PRINT "One";
+  }
+  NOT EQ false AND true{
+      PRINT "Two";
+      PRINT "Three";
+  }
+  NOT EQ false AND true{
+      PRINT "Four";
+      PRINT "Five";
+  }
+};
+20190719 : IF true AND false INC 2.50;
+20190721 : IF true INC 2.50;
+20190722 : IF true INC 2.50;

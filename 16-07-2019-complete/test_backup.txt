@@ -1,0 +1,10 @@
+20190720 : CASE bool_var.y OR true {
+  EQ true {
+      PRINT "One";
+  }
+  NOT EQ false AND true{
+      PRINT "Two";
+      PRINT "Three";
+  }
+};
+20190719 : IF true AND false INC 2.50;

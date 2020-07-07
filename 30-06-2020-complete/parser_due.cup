@@ -1,0 +1,152 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+init with {:
+    // Initialization of global hashamp
+    sym = new HashMap();
+:};
+
+parser code 	{:
+
+    public static HashMap sym;
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+// Terminal tokens
+terminal TOK1, TOK2;
+terminal SEP;
+terminal String ID, VAL;
+terminal EQ, SC, SQO, SQC, AND, OR, NOT, RO, RC;
+terminal IF, ELSE;
+terminal Boolean TRUE, FALSE;
+
+
+
+// Non terminal tokens
+non terminal prog;
+non terminal header, t1_list;
+non terminal code_section;
+non terminal command_list, com;
+non terminal assignment, if;
+non terminal Boolean bool_expr, ass_list_true,ass_list_false;
+non terminal Boolean ass_expr_true,ass_expr_false;
+non terminal Boolean SHIFT0,SHIFT1,NT0,NT1;
+non terminal Boolean expr;
+
+// Precedences and associativities
+// lower precedences
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+// higher precedences
+
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP code_section {: System.out.println("PROG RECOGNIZED!"); :}
+;
+
+header ::=    t1_list TOK2 t1_list  TOK2 t1_list TOK2 t1_list
+            | t1_list TOK2 t1_list TOK2 t1_list
+            | t1_list TOK2 t1_list
+;
+
+t1_list ::= /*empty*/ | t1_list TOK1
+;
+
+code_section ::= /*empty*/ | command_list
+;
+
+command_list ::= com com com com com
+                | command_list com com
+;
+
+com ::= assignment
+        | if
+;
+
+//assignment that does not depend on bool_expr
+assignment ::= ID:a EQ VAL:b SC {: parser.sym.put(a,b);
+                                   System.out.println(a+" "+b);
+                                :}
+;
+
+if ::=   IF SQO bool_expr SQC SQO SHIFT0 ass_list_true SQC ELSE SQO SHIFT1 ass_list_false SQC
+       | IF SQO bool_expr SQC SQO SHIFT0 ass_list_true SQC
+;
+
+SHIFT0 ::= /*empty*/ {: RESULT = (Boolean)parser.stack(-2); :}
+;
+
+SHIFT1 ::= /*empty*/ {: RESULT = (Boolean)parser.stack(-3); :}
+;
+
+bool_expr ::= expr:res {: RESULT = res; :}
+;
+
+expr ::=    expr:a AND expr:b   {: RESULT = a && b; :}
+         |  expr:a OR expr:b    {: RESULT = a || b; :}
+         |  NOT expr:a          {: RESULT = !a; :}
+         |  TRUE                {: RESULT = new Boolean(true); :}
+         |  FALSE               {: RESULT = new Boolean(false);:}
+         |  ID:a EQ EQ VAL:b    {: String val = (String)parser.sym.get(a);
+                                   if(val.equals(b))
+                                        RESULT = new Boolean(true);
+                                   else
+                                        RESULT = new Boolean(false);
+                                :}
+         |  RO expr:x RC        {: RESULT = x; :}
+;
+ass_list_true ::=   ass_expr_true:res                      {: RESULT = res; :}
+                  | ass_list_true NT0:res ass_expr_true    {: RESULT = res; :}
+;
+
+NT0 ::= /*empty*/ {: RESULT = (Boolean)parser.stack(-1); :}
+;
+
+ass_list_false ::=    ass_expr_false
+                    | ass_list_false NT1:res ass_expr_false   {: RESULT = res; :}
+;
+
+NT1 ::= /*empty*/ {: RESULT = (Boolean)parser.stack(-1); :}
+;
+
+ass_expr_true ::= ID:a EQ VAL:b SC {:   parser.sym.put(a,b);
+                                        if((Boolean)parser.stack(-4))
+                                            System.out.println(a+" "+b);
+                                        RESULT = (Boolean)parser.stack(-4);
+                                   :}
+;
+
+ass_expr_false ::= ID:a EQ VAL:b SC {:   parser.sym.put(a,b);
+                                          if(!(Boolean)parser.stack(-4))
+                                            System.out.println(a+" "+b);
+                                   :}
+;

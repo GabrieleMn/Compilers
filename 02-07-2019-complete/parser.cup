@@ -1,0 +1,303 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+parser code 	{:
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3;
+terminal SEP;
+terminal INIT;
+terminal SCORE;
+terminal W, KW, SEC, MIN;
+terminal SC;
+terminal POWER;
+terminal TIME;
+terminal Integer VALUE;
+terminal FZ, SQO, SQC, RO, RC, CM;
+terminal MAX;
+terminal DEC, INC;
+terminal String CASE, ESAC, RANGE_WORD, DO_WORD, DONE_WORD, PRINT_WORD, Q_STRING, EQ_WORD;
+terminal COL;
+
+non terminal prog, header, simulation;
+non terminal token23_list, token23;
+non terminal Integer[] init_command;
+non terminal Integer power;
+non terminal Integer time;
+non terminal Integer[] instruction_list;
+non terminal Integer[] instruction;
+non terminal Integer[] modif,case_comm;
+non terminal operator;
+non terminal Integer power_m;
+non terminal Integer time_m;
+non terminal Integer fz;
+non terminal Integer val_list;
+non terminal Integer val;
+non terminal String computation;
+non terminal String power_unit, time_unit;
+non terminal String NT0;
+non terminal String unit;
+non terminal comp;
+non terminal comp_list;
+non terminal range;
+non terminal ArrayList<String> print_list;
+non terminal String print;
+non terminal eq;
+non terminal NT1, NT2, NT3;
+
+
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP simulation   {: System.out.println("PROG RECOGNIZED!"); :}
+;
+
+//HEADER SECTION
+
+header ::=  token23_list
+          | token23_list TOKEN1 token23_list
+          | token23_list TOKEN1 token23_list TOKEN1 token23_list TOKEN1 token23_list TOKEN1 token23_list
+;
+
+token23_list ::= /*empty*/ | token23_list token23
+;
+
+token23 ::= TOKEN2 | TOKEN3
+;
+
+//SIMULATION SECTION
+
+simulation ::= init_command instruction_list
+;
+
+init_command ::=  INIT power:p SCORE time:t SC  {: RESULT = new Integer[2];
+                                                   RESULT[0] = p;
+                                                   RESULT[1] = t;
+                                                :}
+                | INIT time:t SCORE power:p SC  {: RESULT = new Integer[2];
+                                                   RESULT[0] = p;
+                                                   RESULT[1] = t;
+                                                :}
+                | INIT power:p SCORE SC         {: RESULT = new Integer[2];
+                                                   RESULT[0] = p;
+                                                   RESULT[1] = 120;
+                                                :}
+                | INIT time:t SCORE SC          {: RESULT = new Integer[2];
+                                                   RESULT[0] = 1000;
+                                                   RESULT[1] = t;
+                                                :}
+                | INIT SCORE SC                 {: RESULT = new Integer[2];
+                                                   RESULT[0] = 1000;
+                                                   RESULT[1] = 120;
+                                                :}
+;
+
+power ::= POWER VALUE:val power_unit:unit  {: if(unit.equals("KW"))
+                                                 RESULT = val * 1000;
+                                              else
+                                                 RESULT = val;
+                                           :}
+;
+
+time ::=  TIME VALUE:val time_unit:unit     {: if(unit.equals("MIN"))
+                                                 RESULT = val * 60;
+                                              else
+                                                 RESULT = val;
+                                            :}
+;
+
+power_unit ::=  W   {: RESULT = new String("W"); :}
+              | KW  {: RESULT = new String("KW"); :}
+;
+
+time_unit ::=   SEC {: RESULT = new String("SEC"); :}
+              | MIN {: RESULT = new String("MIN"); :}
+;
+
+instruction_list ::=  instruction instruction instruction:values {: RESULT = values; :}
+                    | instruction_list instruction instruction
+;
+
+instruction ::=   modif:values {: RESULT = values; :}
+
+                  /* the case_comm must forward the power and time value for
+                   * next MODIF commands.
+                   */
+                | case_comm:values {: RESULT = (Integer[])parser.stack(-1); :}
+;
+
+//MODIF COMMAND
+modif ::=  operator:op power_m:val SC {:          Integer[] values = (Integer[])parser.stack(-3);
+                                                  if(op.equals("DEC"))
+                                                      values[0] -= val;
+                                                  else if(op.equals("INC"))
+                                                      values[0] += val;
+
+                                                  System.out.println("POWER: "+values[0]+" TIME: "+values[1]);
+
+                                                  RESULT = values;
+                                      :}
+         | operator:op time_m:val SC  {:          Integer[] values = (Integer[])parser.stack(-3);
+                                                  if(op.equals("DEC"))
+                                                      values[1] -= val;
+                                                  else if(op.equals("INC"))
+                                                      values[1] += val;
+
+                                                  System.out.println("POWER: "+values[0]+" TIME: "+values[1]);
+
+                                                  RESULT = values;
+                                       :}
+;
+
+operator ::=  DEC {: RESULT = new String("DEC"); :}
+            | INC {: RESULT = new String("INC"); :}
+;
+
+
+power_m ::= POWER val:a power_unit:unit {: if(unit.equals("KW"))
+                                              RESULT = a * 1000;
+                                           else
+                                              RESULT = a;
+                                        :}
+;
+
+time_m ::=  TIME val:a time_unit:unit {: if(unit.equals("MIN"))
+                                              RESULT = a * 60;
+                                           else
+                                              RESULT = a;
+                                        :}
+;
+
+fz ::= FZ SQO computation SQC RO NT0 val_list:res RC {: RESULT = res; :}
+;
+
+//used to shift the operator at the start of the val_list
+NT0 ::= /*empty*/ {: RESULT = (String)parser.stack(-2); :}
+;
+
+val_list ::=  val:x  {: RESULT = x; :}
+            | val_list:prev CM val:curr   {: String comm = (String)parser.stack(-3);
+                                             if(comm.equals("MIN")){
+                                                if(curr <= prev)
+                                                  RESULT = curr;
+                                                else
+                                                  RESULT = prev;
+                                             }else if(comm.equals("MAX")){
+                                                if(curr >= prev)
+                                                  RESULT = curr;
+                                                else
+                                                  RESULT = prev;
+                                             }
+                                          :}
+;
+
+val ::=   VALUE:x {: RESULT = x; :}
+        | fz:x    {: RESULT = x; :}
+;
+
+computation ::=   MIN {: RESULT = new String("MIN"); :}
+                | MAX {: RESULT = new String("MAX"); :}
+;
+
+
+//CASE COMMAND
+case_comm ::=  CASE unit NT1 comp_list ESAC
+;
+
+//take the values of power and time and shift them at the start of the list
+NT1 ::= /*empty*/ {: RESULT = parser.stack(-2); :}
+;
+
+unit ::= POWER  {: RESULT = new String("POWER"); :}
+        |TIME  {: RESULT = new String("TIME");  :}
+;
+
+comp_list ::= comp
+             | comp_list NT3 NT2 comp
+;
+
+NT2 ::= /*empty*/ {: RESULT = parser.stack(-2); :}
+;
+
+NT3 ::= /*empty*/ {: RESULT = parser.stack(-2); :}
+;
+
+comp ::= range
+        |eq
+;
+
+range ::= RANGE_WORD VALUE:min COL VALUE:max DO_WORD print_list:list DONE_WORD
+                                      {:
+                                          Integer[] values = (Integer[])parser.stack(-7);
+                                          String unit = (String)parser.stack(-8);
+
+                                          if(unit.equals("POWER")){
+                                              if(values[0]>min && values[0] < max)
+                                                  for (int i = 0; i < list.size();i++)
+                                                      System.out.println(list.get(i));
+                                          }else if(unit.equals("TIME"))
+                                              if(values[1] > min && values[1] < max)
+                                                  for (int i = 0; i < list.size();i++)
+                                                    System.out.println(list.get(i));
+                                      :}
+;
+
+print_list ::= /*empty*/  {: RESULT = new ArrayList<String>(); :}
+              | print_list:l print:val {: RESULT = l;
+                                          l.add(val);
+                                       :}
+;
+
+print ::= PRINT_WORD Q_STRING:val SC  {: RESULT = val; :}
+;
+
+eq ::= EQ_WORD VALUE:val DO_WORD print_list:list DONE_WORD
+                      {:
+                        Integer[] values = (Integer[])parser.stack(-5);
+                        String unit = (String)parser.stack(-6);
+
+                        if(unit.equals("POWER")){
+                          if(values[0].equals(val))
+                              for (int i = 0; i < list.size();i++)
+                                  System.out.println(list.get(i));
+                        }else if(unit.equals("TIME"))
+                          if(values[1].equals(val))
+                              for (int i = 0; i < list.size();i++)
+                                  System.out.println(list.get(i));
+                      :}
+;

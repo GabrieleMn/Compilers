@@ -1,0 +1,290 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+init with {:
+    // Initialization of global hashamp
+    sym = new HashMap<String,Boolean>();
+    money = new Float(0.0);
+:};
+
+parser code 	{:
+
+    public static HashMap<String,Boolean> sym;
+    public static Float money;
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+
+    public void pHash(HashMap h){
+    for (Object key : h.keySet()) {
+        System.out.print("["+key+" = ");
+        System.out.println(h.get(key)+"]");
+      }
+      System.out.print("\n\n");
+    }
+
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3;
+terminal SEP;
+terminal START_WORD;
+terminal Float VAL;
+terminal String DATE;
+terminal COL, DEF, RO, RC;
+terminal BO, BC, ASSIGN, TO;
+terminal String ID;
+terminal EQ, SC;
+terminal AND, OR, NOT;
+terminal TRUE, FALSE;
+terminal IF;
+terminal DEC;
+terminal INC;
+terminal DOT;
+terminal CASE;
+terminal EQ_WORD;
+terminal PRINT;
+terminal String Q_STRING;
+
+
+non terminal prog;
+non terminal header, header1, header2, token2_list, token12_list, token13_list, token12, token13;
+non terminal code_section;
+non terminal String command;
+non terminal String commmand_list;
+non terminal def_command;
+non terminal if_command;
+non terminal case_command;
+non terminal HashMap attribute_list;
+non terminal String[] attribute;
+non terminal Boolean bool_expr;
+non terminal String oper;
+non terminal Float start_t; //initial amount
+non terminal cond_list;
+non terminal cond;
+non terminal String op_case;
+non terminal ArrayList print_list;
+non terminal String print;
+non terminal NT1,NT2;
+non terminal Boolean NT3,NT4;
+
+// Precedences and associativities
+// lower precedences
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+// higher precedences
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+////////////////////////////////
+//HEADER SECTION
+////////////////////////////////
+
+prog ::= header SEP code_section {: System.out.print("PROG RECOGNIZED!"); :}
+;
+
+header ::= header1 | header2
+;
+
+header1 ::= token2_list token13_list
+;
+
+token2_list ::= TOKEN2 TOKEN2 TOKEN2 | token2_list TOKEN2 TOKEN2
+;
+
+token13_list ::=    token13 token13 token13
+                  | token13 token13 token13 token13 token13
+                  | token13 token13 token13 token13 token13 token13 token13 token13
+;
+
+token13 ::= TOKEN1 | TOKEN3
+;
+
+header2 ::= TOKEN3 token12_list TOKEN3 token12_list TOKEN3 token12_list
+;
+
+token12_list ::= /*empty*/| token12_list token12
+;
+
+token12 ::= TOKEN1 | TOKEN2
+;
+
+////////////////////////////////
+//CODE SECTION
+////////////////////////////////
+
+code_section ::= start_t commmand_list
+;
+
+start_t ::=   START_WORD VAL:val SC {: RESULT = val; parser.money = val;  :}
+            | START_WORD SC  {: RESULT = new Float(100.00); parser.money = new Float(100.00); :}
+;
+
+commmand_list ::=  command command NT1 command:a NT2 command:b
+                                                                    {: if( b.compareTo(a)<0 )
+                                                                          System.out.println("Warning: "+b);
+                                                                          RESULT = b;
+                                                                    :}
+                  | commmand_list command:a NT1 command:b
+                                                            {: if( b.compareTo(a)<0 )
+                                                                  System.out.println("Warning: "+b);
+                                                                  RESULT = b;
+                                                            :}
+;
+
+/* NT1 and NT2 are used to be triggered after the reduction of every command.
+ * In this way we can check for each command apart for the first one if its
+ * is greater than the previous dates.
+ */
+NT1 ::= {:
+            String currentDate = (String) parser.stack(0);
+            String previousDate = (String) parser.stack(-1);
+            if(currentDate.compareTo(previousDate) < 0) System.out.println("Warning: "+currentDate);
+        :}
+;
+
+NT2 ::= {:
+            String currentDate = (String) parser.stack(0);
+            String previousDate = (String) parser.stack(-2);
+            if(currentDate.compareTo(previousDate)<0) System.out.println("Warning: "+currentDate);
+        :}
+;
+
+command ::=   DATE:a COL def_command SC    {: RESULT = new String(a); :}
+            | DATE:a COL if_command SC     {: RESULT = new String(a);  :}
+            | DATE:a COL case_command SC   {: RESULT = new String(a);  :}
+;
+
+def_command ::= DEF BO attribute_list:h BC ASSIGN TO ID:var1
+                                  {:
+                                  for (Object inner_key : h.keySet()) {
+                                      String key = var1+"."+(String)inner_key;
+                                      parser.sym.put(key,(Boolean)h.get(inner_key));
+                                    }
+                                  :}
+;
+
+attribute_list ::= /*empty*/ {: RESULT = new HashMap<String,Boolean>(); :}
+                   | attribute_list:h attribute:v   {:
+                                                        h.put(v[0],new Boolean(v[1]));
+                                                        RESULT = h;
+                                                    :}
+;
+
+attribute ::= ID:var2 EQ bool_expr:res SC {:
+                                              RESULT = new String[2];
+                                              RESULT[0] = var2;  //var2
+                                              RESULT[1] = res.toString();  //res of bool_expr
+                                          :}
+;
+
+bool_expr ::=   bool_expr:a AND bool_expr:b {: RESULT = a & b; :}
+              | bool_expr:a OR bool_expr:b  {: RESULT = a | b; :}
+              | NOT bool_expr:a             {: RESULT = !a; :}
+              | TRUE                        {: RESULT = new Boolean(true); :}
+              | FALSE                       {: RESULT = new Boolean(false);:}
+              | RO bool_expr:a RC           {: RESULT = a; :}
+              | ID:id1 DOT ID:id2           {:
+                                              String key = id1+"."+id2;
+                                              RESULT = parser.sym.get(key);
+                                            :}
+;
+
+if_command ::= IF bool_expr:res oper:cmd VAL:val
+                                                {:
+                                                    if(res){
+                                                      if(cmd.equals("DEC"))
+                                                        parser.money -= val;
+                                                      else if(cmd.equals("INC"))
+                                                        parser.money += val;
+                                                    }
+                                                    System.out.println("Money: "+parser.money.toString());
+                                                :}
+;
+
+oper ::= DEC    {: RESULT = new String("DEC"); :}
+        | INC   {: RESULT = new String("INC"); :}
+;
+
+case_command ::= CASE bool_expr BO NT3 cond_list BC
+;
+
+/* NT3 is used to move the result of the first bool_expr at the start of
+ * the list where recursion will happen.
+ */
+NT3 ::= /* empty */ {: RESULT = (Boolean)parser.stack(-1); :}
+;
+
+cond_list ::=     cond
+                | cond_list NT4 cond
+;
+
+/* NT4 is used to let the item after the first (second, tirth ecc ..) to access
+ * the result of the first bool_expr as the first item does.
+ */
+NT4 ::= /* empty */ {: RESULT = (Boolean)parser.stack(-1); :}
+;
+
+cond ::= op_case:cmd bool_expr:res  BO print_list:messages BC
+                                                {:
+                                                    Boolean prev_expr = (Boolean)parser.stack(-5);
+                                                    if(cmd.equals("EQ")){
+                                                        if(res & prev_expr){
+                                                          for(int i = 0; i < messages.size(); i++){
+                                                              System.out.println(messages.get(i));
+                                                            }
+                                                        }
+                                                    }else if(cmd.equals("NEQ")){
+                                                        if(!(res & prev_expr))
+                                                          for(int i = 0; i < messages.size(); i++)
+                                                            System.out.println(messages.get(i));
+
+                                                    }
+                                                :}
+;
+
+op_case ::=   EQ_WORD         {: RESULT = new String("EQ"); :}
+              | NOT EQ_WORD   {: RESULT = new String("NEQ"); :}
+;
+
+print_list ::=  print:val   {: RESULT = new ArrayList<String>();
+                               RESULT.add(val);
+                            :}
+                | print_list:list print:val {:
+                                                RESULT = list;
+                                                RESULT.add(val);
+                                            :}
+;
+
+print ::= PRINT Q_STRING:val SC {: RESULT = val; :}
+;
