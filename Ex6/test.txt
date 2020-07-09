@@ -1,0 +1,19 @@
+/* Header section */
+#&****12home;
+10:40am;
+#&#&**##1234ab1258;
+12A-12abc-123:456;
+$$$
+/* Program section */
+/* Assignments */
+c_x1 = 0.0;
+c_y1 = 0.0+1.0;
+c_x2 = 1.0+c_y1*0.0;
+c_y2 = 1.0*(2.0-1.0);
+
+
+dist = FZ( MAX, [0.0, FZ(MAX, [1.0, 0.0], [0.0, 0.0], [0.0, 2.0]) ],[0.0, FZ(MAX, [1.0, 0.0], [0.0, 0.0], [0.0, 2.0]) ],[c_x2, c_y2] );
+
+IF dist+c_x1 IN RANGE [ 5.5 : 10.0 ] PRINT "Range 1",
+             IN RANGE [ 3.0 : 5.5 ] PRINT "Range 2",
+            IN RANGE [0.0+c_x1 :3.0 ] PRINT "Range 3" ;

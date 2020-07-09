@@ -1,0 +1,135 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+parser code 	{:
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3, SEP;
+terminal String ID;
+terminal EQ, PLUS, MINUS, MUL, DIV, RO, RC, SC, SQO, SQC, COL;
+terminal Float NUMBER;
+terminal FZ, CM, IF, IN, RANGE, PRINT;
+terminal String PATH, MAX;
+terminal String Q_STRING;
+
+non terminal prog, header, program;
+non terminal token23_list, token23;
+non terminal empty_instruction_list;
+non terminal instruction_list, instruction;
+non terminal assignment, function, if;
+non terminal expression;
+non terminal operation;
+non terminal points_list, point;
+non terminal intervals_list, interval;
+non terminal range;
+
+// Precedences and associativities
+// lower precedences
+precedence left PLUS, MINUS;
+precedence left MUL, DIV;
+// higher precedences
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP program   {:  System.out.println("PROG RECOGNIZED"); :}
+;
+
+header ::= token23_list TOKEN1 token23_list TOKEN1 token23_list
+;
+
+token23_list ::=  /*empty*/
+                  |token23_list token23
+;
+
+token23 ::= TOKEN2 | TOKEN3
+;
+
+program ::= empty_instruction_list
+;
+
+empty_instruction_list ::= /*empty*/ | instruction_list
+;
+
+instruction_list ::=  instruction instruction instruction instruction
+                      | instruction_list instruction instruction
+;
+
+instruction ::=  assignment SC
+                |function SC
+                |if SC
+;
+
+assignment ::= ID EQ expression
+;
+
+expression ::=    expression PLUS expression
+                | expression MINUS expression
+                | expression MUL expression
+                | expression DIV expression
+                | RO expression RC
+                | NUMBER
+                | ID
+                | function
+;
+
+function ::= FZ RO operation CM points_list RC
+;
+
+operation ::=  PATH
+             | MAX
+;
+
+points_list ::=  point
+                |points_list CM point
+;
+
+point ::= SQO expression CM expression SQC
+;
+
+if ::= IF expression intervals_list
+;
+
+intervals_list ::=   interval
+                  |  intervals_list CM interval
+;
+
+interval ::= IN RANGE range PRINT Q_STRING
+;
+
+range ::= SQO expression COL expression SQC
+;
