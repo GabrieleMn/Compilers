@@ -1,0 +1,28 @@
+/- Header Section -/
+-1B_aBcDefG_;           /- token -/
+$$01101;                /- token -/
+12:59pm;
+3C_abcde_XYYYYYZZX;    /- token -/
+&&XOXOX;
+##
+"Milano" -> "Torino" 150.0 km,
+            "Genova" 150.2 km,
+            "Venezia" 269.0 km;
+
+"Roma" -> "Napoli" 226.0 km,
+          "Bari" 431.0 km,
+          "Torino" 670.0 km ;
+
+"Torino" -> "Bologna" 332.0 km ;
+
+COMPUTE "Roma" TO "Torino" TIME: 25 % 100 km/h,   /- 670.0*25/100/100=1.675 -/
+                                 25 % 50 km/h,    /- 670.0*25/100/50=3.35 -/
+                                 50 % 125 km/h ;  /- 670.0*50/100/125=2.68 -/
+
+COMPUTE "Milano" TO "Torino" EXPENSE EXTRA 10.00 :
+"codeA" 0.28 euro/km - DISC 9.50 euro,      /- 150.0*.28-9.50-10.00=22.50 -/
+"codeB" DISC 12.00 euro - 0.29 euro/km,     /- 150.0*.29-12.00-10.00=21.50 -/
+"codeC" 0.26 euro/km;                       /- 150.0*.26-10.00=29.00 -/
+
+COMPUTE "Milano" TO "Torino" EXPENSE :
+"codeD" 0.26 euro/km ; /- 150.0*.26=39.00 -/

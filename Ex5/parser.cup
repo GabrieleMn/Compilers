@@ -1,0 +1,209 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+init with {:
+    sym = new HashMap<String,HashMap<String,Float>>();
+:};
+
+parser code 	{:
+
+    public HashMap<String,HashMap<String,Float>> sym;
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3, SEP;
+terminal String Q_STRING;
+terminal KM_W, SC, CM, ARROW, COL;
+terminal Float NUMBER;
+terminal COMPUTE_W, TIME_W, EXPENSE_W, EXTRA_W, TO_W;
+terminal Float NUMBER_2_DEC;
+terminal Integer INTEGER;
+terminal PERC;
+terminal KM_H_W;
+terminal SCORE;
+terminal EURO_KM_W;
+terminal DISC_W;
+terminal EURO_W;
+
+non terminal prog, header;
+non terminal token3_list;
+non terminal command_section;
+non terminal distance_list, compute_list_empty;
+non terminal distance;
+non terminal HashMap destination_list;
+non terminal String [] destination;
+non terminal compute_list, compute;
+non terminal Float opt_discount;
+non terminal Float[] time_list;
+non terminal Float expense_list;
+non terminal Float time;
+non terminal Float expense;
+non terminal Float exp, disc;
+non terminal String[] SHIFT, SHIFT1, NT0, NT1;
+
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP command_section   {: System.out.println("PROG RECOGNIZED"); :}
+;
+
+header ::=  token3_list TOKEN1 token3_list TOKEN1 token3_list TOKEN2 token3_list
+          | token3_list TOKEN1 token3_list TOKEN2 token3_list TOKEN1 token3_list
+          | token3_list TOKEN2 token3_list TOKEN1 token3_list TOKEN1 token3_list
+;
+
+token3_list ::=   /*empty*/
+                | token3_list TOKEN3
+;
+
+command_section ::= distance_list compute_list_empty
+;
+
+distance_list ::=   distance distance distance
+                  | distance_list distance distance
+;
+
+distance ::= Q_STRING:from ARROW destination_list:to SC {: parser.sym.put(from,to); :}
+;
+
+destination_list ::=  destination:val {: RESULT = new HashMap<String,Float>();
+                                         RESULT.put(val[0],new Float(val[1]));
+                                      :}
+                    | destination_list:prev CM destination:val {: RESULT = prev;
+                                                                  RESULT.put(val[0],new Float(val[1]));
+                                                               :}
+;
+
+destination ::= Q_STRING:city NUMBER:dist KM_W  {: RESULT = new String[2];
+                                                   RESULT[0] = city;
+                                                   RESULT[1] = dist.toString();
+                                                :}
+;
+
+compute_list_empty ::=  /*empty*/
+                      | compute_list
+;
+
+compute_list ::=  compute compute
+                | compute_list compute
+;
+
+compute ::=   COMPUTE_W Q_STRING:from TO_W Q_STRING:to TIME_W COL SHIFT time_list:total SC {: System.out.println("TOT: "+total[1]); :}
+            | COMPUTE_W Q_STRING TO_W Q_STRING EXPENSE_W opt_discount COL SHIFT1 expense_list:min SC {: System.out.println("MIN: "+min); :}
+;
+
+SHIFT ::= /*empty*/ {: RESULT = new String[2];
+                       RESULT[0] = (String)parser.stack(-4);  //from
+                       RESULT[1] = (String)parser.stack(-2);  //to
+                    :}
+;
+
+SHIFT1 ::= /*empty*/ {: RESULT = new String[3];
+                        RESULT[0] = (String)parser.stack(-5);  //from
+                        RESULT[1] = (String)parser.stack(-3);  //to
+                        RESULT[2] = ((Float)parser.stack(-1)).toString(); //discount
+                    :}
+;
+
+opt_discount ::= EXTRA_W NUMBER_2_DEC:disc {: RESULT = disc; :}
+                 | /*empty*/               {: RESULT = new Float(0.0); :}
+;
+
+time_list ::=   time:t                  {: RESULT = new Float[2];
+                                           RESULT[0] = new Float(0.0);
+                                           RESULT[1] = t;
+                                           System.out.println("0 "+t);
+                                        :}
+              | time_list:prev CM NT0 time:t       {: RESULT = prev;
+                                                      RESULT[0]++;
+                                                      RESULT[1] += t;
+                                                      System.out.println(RESULT[0].intValue()+" "+t);
+                                                   :}
+;
+
+NT0 ::= /*empty*/ {: RESULT = (String[])parser.stack(-2); :}
+;
+
+time ::= INTEGER:p PERC INTEGER:s KM_H_W  {: String[] fromTo = (String[])parser.stack(-4);
+                                             HashMap<String,Float> hmap = parser.sym.get(fromTo[0]);
+                                             Float dist = hmap.get(fromTo[1]);
+                                             Float time = ((dist*p)/100)/s;
+                                             RESULT = time;
+                                         :}
+;
+
+expense_list ::=  expense:res {: RESULT = res; :}
+                | expense_list:prev CM NT1 expense:curr {: if(curr<=prev)
+                                                              RESULT = curr;
+                                                           else
+                                                              RESULT = prev;
+                                                        :}
+;
+
+NT1 ::= /*empty*/ {: RESULT = (String[]) parser.stack(-2); :}
+;
+
+expense ::=   Q_STRING:c exp:a SCORE disc:b  {:  String[] fromToDisc = (String[])parser.stack(-4);
+                                               HashMap<String,Float> hmap = parser.sym.get(fromToDisc[0]);
+                                               Float dist = hmap.get(fromToDisc[1]);
+                                               Float discount = new Float(fromToDisc[2]);
+                                               Float res = (dist*a)-b-discount;
+                                               System.out.println(c+" "+res);
+                                               RESULT = res;
+                                           :}
+            | Q_STRING:c disc:b SCORE exp:a  {: String[] fromToDisc = (String[])parser.stack(-4);
+                                                HashMap<String,Float> hmap = parser.sym.get(fromToDisc[0]);
+                                                Float dist = hmap.get(fromToDisc[1]);
+                                                Float discount = new Float(fromToDisc[2]);
+                                                Float res = (dist*a)-b-discount;
+                                                System.out.println(c+" "+res);
+                                                RESULT = res;
+                                             :}
+            | Q_STRING:c exp:a         {: String[] fromToDisc = (String[])parser.stack(-2);
+                                          HashMap<String,Float> hmap = parser.sym.get(fromToDisc[0]);
+                                          Float dist = hmap.get(fromToDisc[1]);
+                                          Float discount = new Float(fromToDisc[2]);
+                                          Float res = (dist*a)-discount;
+                                          System.out.println(c+" "+res);
+                                          RESULT = res;
+                                       :}
+;
+
+exp ::= NUMBER_2_DEC:a EURO_KM_W {: RESULT = new Float(a); :}
+;
+
+disc ::=  DISC_W NUMBER_2_DEC:b EURO_W  {: RESULT = new Float(b); :}
+;
