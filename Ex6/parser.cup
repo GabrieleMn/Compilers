@@ -5,9 +5,17 @@
 import java_cup.runtime.*;
 import java.util.*;
 import java.io.*;
+import java.lang.Math;
 
 
+init with {:
+
+          sym = new HashMap<String,Float>();
+ :}
 parser code 	{:
+
+
+    public HashMap<String,Float> sym;
 
     public void report_error(String message, Object info) {
         StringBuffer m = new StringBuffer(message);
@@ -46,12 +54,16 @@ non terminal prog, header, program;
 non terminal token23_list, token23;
 non terminal empty_instruction_list;
 non terminal instruction_list, instruction;
-non terminal assignment, function, if;
-non terminal expression;
-non terminal operation;
-non terminal points_list, point;
+non terminal assignment, if;
+non terminal Float function;
+non terminal Float expression;
+non terminal String operation;
+non terminal Float[] points_list;
+non terminal Float[] point;
 non terminal intervals_list, interval;
-non terminal range;
+non terminal Float[] range;
+non terminal String SHIFT0, NT0;
+non terminal Float NT1;
 
 // Precedences and associativities
 // lower precedences
@@ -94,42 +106,88 @@ instruction ::=  assignment SC
                 |if SC
 ;
 
-assignment ::= ID EQ expression
+assignment ::= ID:id EQ expression:val    {: parser.sym.put(id,val); :}
 ;
 
-expression ::=    expression PLUS expression
-                | expression MINUS expression
-                | expression MUL expression
-                | expression DIV expression
-                | RO expression RC
-                | NUMBER
-                | ID
-                | function
+expression ::=    expression:a PLUS expression:b    {: RESULT = a+b; :}
+                | expression:a MINUS expression:b   {: RESULT = a-b; :}
+                | expression:a MUL expression:b     {: RESULT = a*b; :}
+                | expression:a DIV expression:b     {: RESULT = a/b; :}
+                | RO expression:a RC                {: RESULT = a;   :}
+                | NUMBER:a                          {: RESULT = a;   :}
+                | ID:a                              {: RESULT = (Float)parser.sym.get(a);:}
+                | function:a                        {: RESULT = a;   :}
 ;
 
-function ::= FZ RO operation CM points_list RC
+function ::= FZ RO operation CM SHIFT0 points_list:res RC {: RESULT = res[2]; :}
 ;
 
-operation ::=  PATH
-             | MAX
+SHIFT0 ::=   /*empty*/ {: RESULT = (String)parser.stack(-1); :}
 ;
 
-points_list ::=  point
-                |points_list CM point
+operation ::=  PATH {:  RESULT = new String("PATH"); :}
+             | MAX  {:  RESULT = new String("MAX");  :}
 ;
 
-point ::= SQO expression CM expression SQC
+points_list ::=  point:x1                            {: String op = (String)parser.stack(-1);
+                                                        RESULT = new Float[3];
+                                                        RESULT[0] = x1[0];
+                                                        RESULT[1] = x1[1];
+                                                        if(op.equals("MAX")){
+                                                          RESULT[2] = new Float(-1.0);
+                                                        }else{
+                                                          RESULT[2] = new Float(0.0);
+                                                        }
+                                                     :}
+                |points_list:x1 CM NT0:s point:x2 {:
+                                                        RESULT = new Float[3];
+                                                        RESULT[0] = x2[0];
+                                                        RESULT[1] = x2[1];
+                                                        Float diff = ((x2[1]-x1[1])*(x2[1]-x1[1])) + ((x2[0]-x1[0])*(x2[0]-x1[0]));
+                                                        Double dist = Math.sqrt(diff.doubleValue());
+                                                      if(s.equals("MAX")){
+                                                        if(x1[2].floatValue() == -1.0){ //first couple
+                                                          RESULT[2] = dist.floatValue();
+                                                        }else{
+                                                          if(dist >= x1[2])
+                                                            RESULT[2] = dist.floatValue();
+                                                          else
+                                                            RESULT[2] = x1[2];
+                                                        }
+                                                     }else{
+                                                       RESULT[2] = x1[2] + dist.floatValue();
+                                                     }
+
+                                                  :}
+;
+
+NT0 ::= /*empty*/ {: RESULT = (String)parser.stack(-2);; :}
+;
+
+point ::= SQO expression:x CM expression:y SQC    {: RESULT = new Float[2];
+                                                     RESULT[0] = x;
+                                                     RESULT[1] = y;
+                                                  :}
 ;
 
 if ::= IF expression intervals_list
 ;
 
 intervals_list ::=   interval
-                  |  intervals_list CM interval
+                  |  intervals_list CM NT1 interval
 ;
 
-interval ::= IN RANGE range PRINT Q_STRING
+NT1 ::= /*empty*/ {: RESULT = (Float)parser.stack(-2); :}
 ;
 
-range ::= SQO expression COL expression SQC
+interval ::= IN RANGE range:r PRINT Q_STRING:s    {: Float res = (Float)parser.stack(-5);
+                                                   if(res > r[0] && res < r[1])
+                                                        System.out.println(s);
+                                                  :}
+;
+
+range ::= SQO expression:min COL expression:max SQC {: RESULT = new Float[2];
+                                                       RESULT[0] = min;
+                                                       RESULT[1] = max;
+                                                    :}
 ;
