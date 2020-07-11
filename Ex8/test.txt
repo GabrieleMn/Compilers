@@ -1,0 +1,32 @@
+
+15$17$1501+245/19/255/1503/145; /* <token3> */
+?000100101001;                  /* <token1> */
+2017/07/02:01:40;               /* <token2> */
+?xyx;                           /* <token1> */
+1573$1573+15+15+15+15;          /* <token3> */
+2017/03/30;                     /* <token2> */
+
+####
+CONFIGURE TEMPERATURE 20 HUMIDITY 60;
+STORE a = 3+2, b = a+2, c = 0+avg(2); /* a=5; b=7; c=2; */
+
+
+
+CASE a IS { /* a=5 */
+IN RANGE b-5, 4 {
+HUMIDITY -3;
+}
+EQUAL b-2 {
+TEMPERATURE -3;
+HUMIDITY 3+a-b;
+TEMPERATURE AVG(2, 2, avg(c, c, 2));
+}
+};
+
+CASE a+avg(0,2) IS { /* a+avg(0,2)=5+1=6 */
+EQUAL 2 { }
+EQUAL 6 {
+TEMPERATURE 2+avg();
+HUMIDITY 3+2*3;
+}
+IN RANGE 2, 5 { TEMPERATURE +2; HUMIDITY -3; } };

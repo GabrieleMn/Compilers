@@ -1,0 +1,261 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+init with {: sym = new HashMap<String,Integer>(); :}
+parser code 	{:
+
+    public HashMap<String, Integer> sym;
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3, SEP;
+terminal CONFIGURE, TEMPERATURE, HUMIDTY;
+terminal Integer INTEGER;
+terminal SC;
+terminal STORE;
+terminal String ID;
+terminal EQ;
+terminal PLUS, MINUS, MUL, DIV, POW, RO, RC, BO,BC;
+terminal AVG;
+terminal CM;
+terminal CASE, IS;
+terminal IN, RANGE, EQUAL;
+terminal UMINUS;
+
+non terminal prog, header, state_section;
+non terminal token1_list, token23, token12_list, token12;
+non terminal Integer[] configure;
+non terminal Integer[] command_list, command;
+non terminal store_cmd, ass_list;
+non terminal ass;
+non terminal Integer expr;
+non terminal Integer avg;
+non terminal Integer[] expr_list;
+non terminal Integer[] case_cmd;
+non terminal Integer empty_expr_list;
+non terminal Integer[] cond_list, cond;
+non terminal Integer[] mod_list, mod;
+
+non terminal Integer[] SHIFT0, NT0;
+non terminal Integer[] SHIFT1, SHIFT2;
+
+
+// Precedences and associativities
+// lower precedences
+precedence left PLUS, MINUS;
+precedence left POW, MUL, DIV;
+precedence left UMINUS;
+// higher precedences
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP state_section   {: System.out.println("PROG RECOGNIZED"); :}
+;
+
+header ::=    token1_list token23 token23
+            | token1_list token23 token23 token23
+            | token1_list token23 token23 token23 token23 token23 token23 token23 token23 token23
+            | TOKEN3 token12_list TOKEN3 token12_list
+;
+
+token1_list ::=   TOKEN1 TOKEN1 TOKEN1 TOKEN1
+                | token1_list TOKEN1 TOKEN1
+;
+
+token23 ::= TOKEN2 | TOKEN3
+;
+
+token12_list ::=    /*empty*/
+                  | token12_list token12
+;
+
+token12 ::= TOKEN1 | TOKEN2
+;
+
+state_section ::= configure command_list
+;
+
+configure ::=   CONFIGURE HUMIDTY INTEGER:h TEMPERATURE INTEGER:t SC  {: RESULT = new Integer[2];
+                                                                         RESULT[0] =  t ;
+                                                                         RESULT[1] = h;
+                                                                      :}
+              | CONFIGURE TEMPERATURE INTEGER:t HUMIDTY INTEGER:h SC  {: RESULT = new Integer[2];
+                                                                         RESULT[0] =  t ;
+                                                                         RESULT[1] = h;
+                                                                      :}
+              | CONFIGURE HUMIDTY INTEGER:h SC                         {: RESULT = new Integer[2];
+                                                                         RESULT[0] =  new Integer(20);
+                                                                         RESULT[1] = h;
+                                                                       :}
+              | CONFIGURE TEMPERATURE INTEGER:t SC                     {: RESULT = new Integer[2];
+                                                                         RESULT[0] = t ;
+                                                                         RESULT[1] = new Integer(50);
+                                                                      :}
+;
+
+command_list ::=  /*empty*/               {: RESULT = (Integer[])parser.stack(0); :}
+                | command_list command:ns {: RESULT = ns; :}
+;
+
+command ::=   store_cmd SC    {: RESULT = (Integer[])parser.stack(-3); :} //never update the state
+            | case_cmd:ns SC  {: RESULT = new Integer[2];
+                                 RESULT[0] = ns[1];
+                                 RESULT[1] = ns[2];
+                              :}
+;
+
+store_cmd ::= STORE ass_list
+;
+
+ass_list ::=  ass
+            | ass_list CM ass
+;
+
+ass ::= ID:id EQ expr:val {: parser.sym.put(id,val); :}
+;
+
+expr ::=  expr:a PLUS expr:b           {: RESULT = a+b; :}
+        | expr:a MINUS expr:b          {: RESULT = a-b; :}
+        | MINUS expr:a                 {: RESULT = -a; :}
+          %prec UMINUS
+        | PLUS expr:a                  {: RESULT = +a; :}
+        | expr:a MUL expr:b            {: RESULT = a*b; :}
+        | expr:a DIV expr:b            {: RESULT = a/b; :}
+        | expr:a POW expr:b            //TODO
+        | RO expr:a RC                 {: RESULT = a; :}
+        | ID:id                        {: RESULT = (Integer)parser.sym.get(id); :}
+        | INTEGER:a                    {: RESULT = a; :}
+        | avg:a                        {: RESULT = a; :}
+;
+
+avg ::= AVG RO empty_expr_list:avg RC {: RESULT = avg; :}
+;
+
+empty_expr_list ::=  /*empty*/      {: RESULT = new Integer(0); :}
+                    | expr_list:res {: RESULT = res[1]/res[0];  :}
+;
+
+expr_list ::=  expr:a {: RESULT = new Integer[2];
+                         RESULT[0] = 1; //counter
+                         RESULT[1] = a; //sum
+                      :}
+              | expr_list:prev CM expr:curr {: RESULT = prev;
+                                               RESULT[0] += 1;
+                                               RESULT[1] += curr;
+                                            :}
+;
+
+case_cmd ::= CASE expr IS BO SHIFT0 cond_list:ns BC {: RESULT = ns; :}
+;
+
+SHIFT0 ::= {: Integer[] currentState = (Integer[])parser.stack(-4);
+              RESULT = new Integer[3];
+              RESULT[0] = (Integer)parser.stack(-2); //LHS of if
+              RESULT[1] = currentState[0];           //humidity
+              RESULT[2] = currentState[1];           //temperature
+            :}
+;
+
+cond_list ::=   cond:ns {: RESULT = ns; :}
+              | cond_list NT0 cond:ns {: RESULT = ns; :}
+;
+
+NT0 ::= {: RESULT = (Integer[])parser.stack(-1); :}
+;
+
+cond ::=  IN RANGE expr CM expr BO SHIFT1 mod_list:ns BC  {: RESULT = ns; :}
+        | EQUAL expr BO SHIFT2 mod_list:ns BC {: RESULT = ns; :}
+;
+
+SHIFT1 ::= {: Integer min = (Integer)parser.stack(-3);
+              Integer max = (Integer)parser.stack(-1);
+              Integer[] currentState = (Integer[])parser.stack(-6);
+
+              RESULT = new Integer[3];
+
+              if(currentState[0]>=min && currentState[0]<=max)
+                RESULT[0] = new Integer(1);
+              else
+                RESULT[0] = new Integer(0);
+
+                RESULT[1] = currentState[1];
+                RESULT[2] = currentState[2];
+
+           :}
+;
+
+
+SHIFT2 ::= {: Integer rhs = (Integer)parser.stack(-1);
+              Integer[] currentState = (Integer[])parser.stack(-3);
+
+              RESULT = new Integer[3];
+
+              if(currentState[0].intValue() == rhs.intValue()){
+                RESULT[0] = new Integer(1);
+              }
+              else
+                RESULT[0] = new Integer(0);
+
+              RESULT[1] = currentState[1];
+              RESULT[2] = currentState[2];
+
+           :}
+;
+
+mod_list ::=  /*empty*/       {: RESULT = (Integer[])parser.stack(0); :}
+            | mod_list mod:ns {: RESULT = ns; :}
+;
+
+mod ::=   TEMPERATURE expr:a SC {: Integer[] currentState = (Integer[])parser.stack(-3);
+                                   RESULT = new Integer[3];
+                                   RESULT[0] = currentState[0];
+                                   RESULT[1] = currentState[1];
+                                   RESULT[2] = currentState[2];
+                                   if(currentState[0].intValue() ==1){
+                                      RESULT[1] += a;
+                                      System.out.println("Temperature: "+RESULT[1]+" - "+"Humidity: "+RESULT[2]);
+                                   }
+                              :}
+        | HUMIDTY expr:a SC   {: Integer[] currentState = (Integer[])parser.stack(-3);
+                               RESULT = new Integer[3];
+                               RESULT[0] = currentState[0];
+                               RESULT[1] = currentState[1];
+                               RESULT[2] = currentState[2];
+
+                                 if(currentState[0].intValue() ==1){
+                                      RESULT[2] += a;
+                                      System.out.println("Temperature: "+RESULT[1]+" - "+"Humidity: "+RESULT[2]);
+                                 }
+                             :}
+;
