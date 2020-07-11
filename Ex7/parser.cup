@@ -1,0 +1,229 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+init with {: sym = new HashMap<String,HashMap<String,Integer>>(); :}
+parser code 	{:
+
+
+    public HashMap<String,HashMap<String,Integer>> sym;
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal TOKEN1, TOKEN2, TOKEN3, SEP;
+terminal String ID;
+terminal EQ, BO, BC, SC, NEQ;
+terminal Integer INTEGER;
+terminal START, STATE, IF, FI, CASE, DO, DONE, AND, OR, NOT, RO, RC, DOT;
+terminal PRINT;
+terminal String Q_STRING;
+terminal NEW;
+
+non terminal prog, header, token3_list, declaration_section, state_section;
+non terminal decl_list, decl;
+non terminal Integer[] attr_list;
+non terminal Integer attr;
+non terminal String if_list;
+non terminal String if_cmd;
+non terminal String case_list, case_cmd;
+non terminal Boolean expr;
+non terminal cmd_list, cmd;
+non terminal assignment, data, print_cmd;
+non terminal String newState;
+non terminal String start_command;
+non terminal String SHIFT0, NT0;
+non terminal Integer scalar;
+non terminal Boolean SHIFT2, NT2;
+non terminal Boolean[] SHIFT3, NT3;
+
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left NEQ,EQ;
+
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::=  header SEP declaration_section SEP state_section   {: System.out.println("PROG RECOGNIZED"); :}
+;
+
+
+header ::=    token3_list TOKEN1 token3_list TOKEN2 token3_list TOKEN2 token3_list
+            | token3_list TOKEN2 token3_list TOKEN1 token3_list TOKEN2 token3_list
+            | token3_list TOKEN2 token3_list TOKEN2 token3_list TOKEN1 token3_list
+;
+
+token3_list ::= /*empty*/
+                |token3_list TOKEN3
+;
+
+declaration_section ::=  /*empty*/
+                       | decl_list
+;
+
+decl_list ::=   decl decl decl
+              | decl_list decl decl
+;
+
+decl ::= ID:id EQ ID BO SHIFT0 attr_list:res BC SC {: System.out.println("Min: "+res[0]+" Max: "+res[1]); :}
+;
+
+SHIFT0 ::= /*empty*/ {: RESULT = (String)parser.stack(-3);
+                        HashMap<String,Integer> innerMap = new HashMap<String,Integer>();
+                        parser.sym.put(RESULT,innerMap);
+                     :}
+;
+
+attr_list ::=   attr:val            {: RESULT = new Integer[2];
+                                       RESULT[0] = val; //MIN
+                                       RESULT[1] = val; //MAX
+                                    :}
+              | attr_list:prev NT0 attr:curr  {: RESULT = prev;
+                                                 if(curr<=prev[0])
+                                                    RESULT[0]=curr;
+                                                 else if(curr>prev[1])
+                                                    RESULT[1]=curr;
+                                              :}
+;
+
+NT0 ::= /*empty*/ {: RESULT = (String)parser.stack(-1); :}
+;
+
+attr ::= ID:a EQ INTEGER:val SC   {: String id = (String)parser.stack(-4);
+                                   HashMap<String,Integer>innerMap = parser.sym.get(id);
+                                   innerMap.put(a,val);
+                                   RESULT = val;
+                                :}
+;
+
+state_section ::= start_command if_list
+;
+
+start_command ::= START STATE ID:s SC {: RESULT = s; :}
+;
+
+if_list ::=  if_cmd:ns  {: if(!ns.equals(""))
+                              RESULT = ns;
+                           else
+                              RESULT = (String)parser.stack(-1);
+                        :}
+            |if_list:prev if_cmd:ns {: if(!ns.equals(""))
+                                                RESULT = ns;
+                                           else
+                                                RESULT = prev;
+                                        :}
+;
+
+if_cmd ::= IF STATE ID SHIFT2 case_list:ns FI {:   RESULT = ns; :}
+;
+
+SHIFT2 ::= /*empty*/ {: String currentState = (String)parser.stack(-3);
+                        String caseState = (String)parser.stack(0);
+                        if(caseState.equals(currentState))
+                            RESULT = new Boolean(true);
+                        else
+                            RESULT = new Boolean(false);
+                     :}
+;
+
+case_list ::=  case_cmd:ns  {: RESULT = ns; :}
+              | case_list NT2 case_cmd:ns  {:   RESULT = ns; :}
+;
+
+NT2 ::= {: RESULT = (Boolean)parser.stack(-1); :}
+;
+
+case_cmd ::= CASE expr DO SHIFT3 cmd_list newState:ns SC DONE {: RESULT =ns; :}
+;
+
+SHIFT3 ::= /*empty*/ {:  RESULT = new Boolean[2];
+                         RESULT[0] = (Boolean)parser.stack(-3); //case match
+                         RESULT[1] = (Boolean)parser.stack(-1);  //expr match
+                     :}
+;
+
+expr ::= scalar:a EQ EQ scalar:b   {: if(a.equals(b))
+                                                    RESULT = new Boolean(true);
+                                                else
+                                                    RESULT = new Boolean(false);
+                                             :}
+        | scalar:a NEQ scalar:b     {: if(!a.equals(b))
+                                                    RESULT = new Boolean(true);
+                                                 else
+                                                    RESULT = new Boolean(false);
+                                              :}
+        | expr:a AND expr:b      {: RESULT = a & b ; :}
+        | expr:a OR expr:b       {: RESULT = a | b;  :}
+        | NOT expr:a             {: RESULT = !a;     :}
+        | RO expr:a RC           {: RESULT = a;      :}
+;
+
+scalar ::=    INTEGER:val            {:  RESULT = val; :}
+            | ID:s1 DOT ID:s2        {: HashMap<String,Integer> innerMap = parser.sym.get(s1);
+                                        RESULT = innerMap.get(s2);
+                                     :}
+;
+
+
+cmd_list ::=  cmd
+            | cmd_list NT3 cmd
+;
+
+NT3 ::= {: RESULT = (Boolean[])parser.stack(-1); :}
+;
+
+cmd ::=   assignment SC
+        | print_cmd SC
+;
+
+assignment ::= data EQ data
+;
+
+data ::= ID DOT ID
+;
+
+print_cmd ::= PRINT Q_STRING:s  {:  Boolean[] executionFlag = (Boolean[])parser.stack(-2);
+                                    if(executionFlag[0] && executionFlag[1])
+                                        System.out.println(s);
+                                :}
+;
+
+newState ::= NEW STATE ID:id    {:  Boolean[] executionFlag = (Boolean[])parser.stack(-4);
+                                    if(executionFlag[0] && executionFlag[1])
+                                          RESULT = id;
+                                    else
+                                          RESULT = "";
+                                :}
+;
