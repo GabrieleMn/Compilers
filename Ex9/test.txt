@@ -1,0 +1,25 @@
+-14abcdefgABC;                  % <token1>
+10*100-101-10*1000-11110-10;    % <token1>
+08:12:34;                       % <token1>
+16:01:59;                       % <token1>
+82YXYXXXYX;                     % <token1>
+
+$$
+
+set position 2, 3 - fuel 10;
+
+declare {x=3; y=7; tires=5;} car;
+
+? car.x==3 and car.y==5 or not car.tires==6 {
+mv -1, -1, fuel -1;
+mv -1, -2, fuel -2;
+};
+
+fuel increases : max ( 3, car.x, car.y );
+
+? car.y==4 {
+mv -1, -1, fuel -1;
+}else{
+mv -2, -2,fuel -3;
+mv -1, -2, fuel -2;
+};

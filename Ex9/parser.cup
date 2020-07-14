@@ -1,0 +1,270 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+init with {: sym = new HashMap<String,HashMap<String,Integer>>(); :}
+
+parser code 	{:
+
+    public HashMap<String,HashMap<String,Integer>> sym;
+
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal T1,T2,T3,SEP;
+terminal SET, POSITION, CM, SCORE, FUEL, SC;
+terminal Integer INTEGER;
+terminal DECLARE, BO, BC, EQ;
+terminal String ID;
+terminal DOT, AND, OR, NOT, RO, RC, QUESTION, MV;
+terminal COL, INCREASE, DECREASE;
+terminal String MIN, MAX;
+terminal ELSE_W;
+
+non terminal prog, header, t12_list, t12;
+non terminal car_section;
+non terminal Integer[] set_cmd, cmd_list, cmd;
+non terminal Integer[] declare, if, fuel_cmd;
+non terminal HashMap<String,Integer> attr_list;
+non terminal String[] attr;
+non terminal else;
+non terminal Integer[] mv_list, mv_cmd, mv_cmd_else;
+non terminal Boolean expr;
+non terminal Integer fun, val_list, val;
+non terminal Integer scalar;
+non terminal Integer[] SHIFT0,SHIFT1;
+non terminal mv_list_else;
+
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left EQ;
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+
+prog ::= header SEP car_section{: System.out.println("PROG RECOGNIZED"); :}
+;
+
+header ::=  /*empty*/ t12_list
+            | t12_list T3 t12_list
+            | t12_list T3 t12_list T3 t12_list
+            | t12_list T3 t12_list T3 t12_list T3 t12_list T3 t12_list
+;
+
+t12_list ::=  /*empty*/
+            | t12_list t12
+;
+
+t12 ::= T1 | T2
+;
+
+car_section ::= set_cmd cmd_list
+;
+
+set_cmd ::=   SET POSITION INTEGER:x CM INTEGER:y SCORE FUEL INTEGER:f SC   {: RESULT = new Integer[3];
+                                                                               RESULT[0] = x;
+                                                                               RESULT[1] = y;
+                                                                               RESULT[2] = f;
+                                                                             :}
+            | SET FUEL INTEGER:f CM INTEGER SCORE POSITION INTEGER:x CM INTEGER:y SC {: RESULT = new Integer[3];
+                                                                                           RESULT[0] = x;
+                                                                                           RESULT[1] = y;
+                                                                                           RESULT[2] = f;
+                                                                                         :}
+            | SET POSITION INTEGER:x CM INTEGER:y SCORE SC                               {: RESULT = new Integer[3];
+                                                                                           RESULT[0] = x;
+                                                                                           RESULT[1] = y;
+                                                                                           RESULT[2] = 0;
+                                                                                         :}
+            | SET FUEL INTEGER:f SCORE SC                                                {: RESULT = new Integer[3];
+                                                                                           RESULT[0] = 0;
+                                                                                           RESULT[1] = 0;
+                                                                                           RESULT[2] = f;
+                                                                                         :}
+            | SET SCORE SC                                                               {: RESULT = new Integer[3];
+                                                                                           RESULT[0] = 0;
+                                                                                           RESULT[1] = 0;
+                                                                                           RESULT[2] = 0;
+                                                                                         :}
+;
+
+cmd_list ::=  cmd cmd cmd cmd:state   {: RESULT = state; :}
+            | cmd_list cmd cmd:state  {: RESULT = state; :}
+;
+
+cmd ::=   declare:state SC  {: RESULT = state; :}
+        | if:state SC       {: RESULT = state; :}
+        | fuel_cmd:state SC {: RESULT = state; :}
+;
+
+declare ::= DECLARE BO attr_list:hMap BC ID:id {: parser.sym.put(id,hMap);
+                                                  RESULT = new Integer[3];
+                                                  RESULT = (Integer[])parser.stack(-5); //copy the state from previous command
+                                               :}
+;
+
+attr_list ::=   attr:val {: HashMap<String,Integer>hmap = new HashMap<String,Integer>();
+                            hmap.put(val[0],new Integer(val[1]));
+                            RESULT = hmap;
+                      :}
+              | attr_list:hmap attr:val {: hmap.put(val[0],new Integer(val[1]));
+                                           RESULT = hmap;
+                                        :}
+;
+
+attr ::= ID:id EQ INTEGER:val SC  {: RESULT = new String[2];
+                                     RESULT[0] = id;
+                                     RESULT[1] = val.toString();
+                                  :}
+;
+
+if ::= QUESTION expr BO SHIFT0 mv_list:state BC else {: RESULT = new Integer[3];
+                                                        RESULT[0] = state[1];
+                                                        RESULT[1] = state[2];
+                                                        RESULT[2] = state[3];
+                                                     :}
+;
+
+SHIFT0 ::= {: RESULT = new Integer[4];
+              Boolean exec = (Boolean)parser.stack(-1);
+              if(exec)
+                RESULT[0] = new Integer(1);
+              else
+                RESULT[0] = new Integer(0);
+
+              Integer[] state = (Integer[])parser.stack(-3);
+
+              RESULT[1] = state[0]; //X
+              RESULT[2] = state[1]; //Y
+              RESULT[3] = state[2]; //FUEL
+            :}
+;
+
+
+
+else ::=  /*empty*/
+        | ELSE_W BO SHIFT1 mv_list_else BC
+;
+
+SHIFT1 ::= {: RESULT = (Integer[])parser.stack(-4); :}
+;
+
+mv_list ::=  mv_cmd:state         {: RESULT = state; :}
+            |mv_list mv_cmd:state {: RESULT = state; :}
+;
+
+mv_list_else ::=  mv_cmd_else:state              {: RESULT = state; :}
+                | mv_list_else mv_cmd_else:state {: RESULT = state; :}
+;
+
+
+mv_cmd ::= MV INTEGER:a CM INTEGER:b CM FUEL INTEGER:c SC {: Integer[] state = (Integer[])parser.stack(-8);
+                                                             Integer exec = state[0];
+                                                             RESULT = new Integer[4];
+
+                                                             RESULT = state;
+
+                                                             if(exec.intValue() == 1){
+                                                                RESULT[1] += a;
+                                                                RESULT[2] += b;
+                                                                RESULT[3] += c;
+                                                                System.out.println("X:"+RESULT[1]+ " Y:"+RESULT[2]+" FUEL:"+RESULT[3]);
+                                                             }
+                                                    :}
+;
+
+
+mv_cmd_else ::= MV INTEGER:a CM INTEGER:b CM FUEL INTEGER:c SC {: Integer[] state = (Integer[])parser.stack(-8);
+                                                                  Integer exec = state[0];
+                                                                  RESULT = new Integer[4];
+
+                                                                  RESULT = state;
+
+                                                                  if(exec.intValue() == 0){
+                                                                    RESULT[1] += a;
+                                                                    RESULT[2] += b;
+                                                                    RESULT[3] += c;
+                                                                    System.out.println("X:"+RESULT[1]+ " Y:"+RESULT[2]+" FUEL:"+RESULT[3]);
+                                                                  }
+                                                                :}
+;
+
+
+
+expr ::=  scalar:a EQ EQ scalar:b {: if(a.equals(b))
+                                        RESULT = new Boolean(true);
+                                     else
+                                        RESULT = new Boolean(false);
+                                  :}
+        | expr:a AND expr:b       {: RESULT = a & b; :}
+        | expr:a OR expr:b        {: RESULT = a | b; :}
+        | NOT expr:a              {: RESULT = !a; :}
+        | RO expr:a RC            {: RESULT = a; :}
+;
+
+scalar ::=  INTEGER:val     {: RESULT = val; :}
+          | ID:a DOT ID:b   {: RESULT = (parser.sym.get(a)).get(b); :}
+;
+
+fuel_cmd ::=  FUEL INCREASE COL fun:val {: Integer[] state = (Integer[])parser.stack(-4);
+                                           RESULT = state;
+                                           RESULT[2] += val;
+                                           System.out.println("X:"+RESULT[0]+ " Y:"+RESULT[1]+" FUEL:"+RESULT[2]);
+                                        :}
+            | FUEL DECREASE COL fun:val {: Integer[] state = (Integer[])parser.stack(-4);
+                                           RESULT = state;
+                                           RESULT[2] -= val;
+                                           System.out.println("X:"+RESULT[0]+ " Y:"+RESULT[1]+" FUEL:"+RESULT[2]);
+                                        :}
+;
+
+fun ::=  MIN RO val_list:m RC {: RESULT = m; :}
+        |MAX RO val_list:m RC {: RESULT = m; :}
+;
+
+val_list ::=    val:m                       {: RESULT = m; :}
+              | val_list:prev CM val:curr   {: String op = (String)parser.stack(-4);
+                                               RESULT = prev;
+                                               if(op.equals("min")){
+                                                  if(curr <= prev)
+                                                      RESULT = curr;
+                                               }else if(op.equals("max")){
+                                                  if(curr>prev)
+                                                    RESULT = curr;
+                                               }
+                                            :}
+;
+
+val ::=   ID:a DOT ID:b   {: RESULT = (parser.sym.get(a)).get(b); :}
+        | INTEGER:val     {: RESULT = val; :}
+;
