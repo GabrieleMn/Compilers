@@ -1,0 +1,196 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+init with {: sym = new HashMap<String,HashMap<String,Integer>>(); :}
+
+parser code 	{:
+
+    public HashMap<String,HashMap<String,Integer>> sym;
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal T1, T2, SEP;
+terminal Integer INTEGER;
+terminal START, CM, SC;
+terminal String ID;
+terminal BO, BC, COL, VAR;
+terminal DOT;
+terminal AND, OR , NOT, NEQ, EQ;
+terminal MOVE, WHEN;
+terminal THEN, DONE;
+
+non terminal prog, header, t1_list;
+non terminal command_section;
+non terminal Integer[] start_cmd, cmd_list;
+non terminal Integer[] cmd;
+non terminal Integer[] var_cmd, move_cmd, when_cmd;
+non terminal  HashMap<String,Integer> attr_list;
+non terminal String[] attr;
+non terminal Integer pos;
+non terminal Integer[] move_list;
+non terminal Integer scalar;
+non terminal Boolean expr;
+non terminal Integer[] move_cmd_cond;
+non terminal Integer[] SHIFT0;
+
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left NEQ, EQ;
+
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP command_section    {: System.out.println("PROG RECOGNIZED"); :}
+;
+
+header ::=  t1_list
+          | t1_list T2 t1_list
+;
+
+t1_list ::=   /*empty*/
+            | t1_list T1
+;
+
+command_section ::= start_cmd cmd_list
+;
+
+start_cmd ::= START INTEGER:x CM INTEGER:y CM INTEGER:z SC {: RESULT = new Integer[3];
+                                                              RESULT[0] = x;
+                                                              RESULT[1] = y;
+                                                              RESULT[2] = z;
+                                                           :}
+;
+
+cmd_list ::=  /*empty*/           {: RESULT = (Integer[])parser.stack(0); :}
+            | cmd_list cmd:state  {: RESULT = state; :}
+;
+
+cmd ::=   var_cmd:state   {: RESULT = state; :}
+        | move_cmd:state  {: RESULT = state; :}
+        | when_cmd:state  {: RESULT = state; :}
+;
+
+var_cmd ::= VAR BO attr_list:hmap BC ID:id SC {: parser.sym.put(id,hmap);
+                                                 RESULT = (Integer[])parser.stack(-6);
+                                              :}
+;
+
+attr_list ::=   attr:a CM attr:b CM attr:c        {: HashMap<String,Integer> hmap = new HashMap<String,Integer>();
+                                                     hmap.put(a[0],new Integer(a[1]));
+                                                     hmap.put(b[0],new Integer(b[1]));
+                                                     hmap.put(c[0],new Integer(c[1]));
+
+                                                     RESULT = hmap;
+                                                  :}
+              | attr_list:hmap CM attr:a CM attr:b CM attr:c {: hmap.put(a[0],new Integer(a[1]));
+                                                                hmap.put(b[0],new Integer(b[1]));
+                                                                hmap.put(c[0],new Integer(c[1]));
+                                                                RESULT = hmap;
+                                                             :}
+;
+
+attr ::= ID:id COL INTEGER:val {: RESULT = new String[2];
+                                  RESULT[0] = id;
+                                  RESULT[1] = val.toString();
+                               :}
+;
+
+move_cmd ::= MOVE pos:x CM pos:y CM pos:z SC    {: Integer[] state = (Integer[])parser.stack(-7);
+                                                   state[0] += x;
+                                                   state[1] += y;
+                                                   state[2] += z;
+                                                   System.out.println("X:"+state[0]+" Y:"+state[1]+" Z:"+state[2]);
+                                                   RESULT = state;
+                                                :}
+;
+
+pos ::=  INTEGER:val        {: RESULT = val; :}
+        |ID:id1 DOT ID:id2  {: RESULT = (parser.sym.get(id1)).get(id2); :}
+;
+
+when_cmd ::= WHEN expr THEN SHIFT0 move_list DONE SC
+;
+
+SHIFT0 ::= {: RESULT = new Integer[4];
+              Integer[] state = (Integer[])parser.stack(-3);
+              RESULT[0] = state[0];
+              RESULT[1] = state[1];
+              RESULT[2] = state[2];
+
+              Boolean exec = (Boolean)parser.stack(-1);
+
+              if(exec)
+                RESULT[3] = new Integer(1);
+              else
+                RESULT[3] = new Integer(0);
+           :}
+;
+
+move_list ::=   move_cmd_cond:state             {: RESULT = state; :}
+              | move_list move_cmd_cond:state   {: RESULT = state; :}
+;
+
+move_cmd_cond ::= MOVE pos:x CM pos:y CM pos:z SC {: Integer[] state = (Integer[])parser.stack(-7);
+                                                     RESULT = state;
+                                                     if(state[3].equals(1)){  //exec
+                                                        state[0] += x;
+                                                        state[1] += y;
+                                                        state[2] += z;
+                                                        System.out.println("X:"+state[0]+" Y:"+state[1]+" Z:"+state[2]);
+                                                     }
+                                                  :}
+;
+
+expr ::=  expr:a AND expr:b         {: RESULT = a & b; :}
+        | expr:a OR expr:b          {: RESULT = a | b; :}
+        | NOT expr:a                {: RESULT = !a; :}
+        | scalar:a EQ EQ scalar:b   {: if(a.equals(b))
+                                          RESULT = new Boolean(true);
+                                       else
+                                          RESULT = new Boolean(false);
+                                    :}
+        | scalar:a NEQ scalar:b     {: if(a.equals(b))
+                                          RESULT = new Boolean(false);
+                                       else
+                                          RESULT = new Boolean(true);
+                                    :}
+;
+
+//could be removed, use pos instead
+scalar ::=   INTEGER:val        {: RESULT = val; :}
+          |  ID:id1 DOT ID:id2  {: RESULT = (parser.sym.get(id1)).get(id2); :}
+;
