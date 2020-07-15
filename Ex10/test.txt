@@ -1,0 +1,30 @@
+10:11:12;       /* <hour> */
+13:52:58;       /* <hour> */
+xxxxyyyy|-2b;
+xyzxxxyyxx|;
+xxyyzz|223;
+101.111-101001111100000-101;
+111+000+101+010+110-001;
+
+##
+/* States section */
+S0 = [ a = 1, b = 2 ];
+S1 = [ a = 3, b = 4 ];
+S2 = [ a = 5, b = 6, c = 7 ];
+##
+
+/* Transitions section */
+INIT S2;
+WHEN S0.a==1 || S0.b==2 && S1.a==2 DO
+CASE S1 NEXT S2;
+CASE S2 NEXT S3;
+PRINT "FIRST WHEN";
+DONE;
+WHEN ! ( S1.a==5 || S1.b==4) DO
+CASE S1 NEXT S2;
+DONE;
+WHEN ! ! S2.a == 5 DO
+PRINT "THIRD WHEN";
+CASE S3 NEXT S1;
+CASE S1 NEXT S2;
+DONE;

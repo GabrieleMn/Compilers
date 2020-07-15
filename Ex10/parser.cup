@@ -1,0 +1,191 @@
+/*************************
+ Parser
+**************************/
+
+import java_cup.runtime.*;
+import java.util.*;
+import java.io.*;
+
+
+init with {: sym = new HashMap<String,HashMap<String,Integer>>(); :}
+parser code 	{:
+
+    public HashMap<String,HashMap<String,Integer>> sym;
+    public void report_error(String message, Object info) {
+        StringBuffer m = new StringBuffer(message);
+        if (info instanceof Symbol) {
+            if (((Symbol)info).left != 1 && ((Symbol)info).right != 1) {
+                if (((Symbol)info).left != -1 && ((Symbol)info).right != -1) {
+                    int line = (((Symbol)info).left) + 1;
+                    int column = (((Symbol)info).right) + 1;
+                    m.append(" (line " + line + " column " + column + ")");
+                }
+            }
+            System.err.println(m);
+        }
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos + position)).value);
+    }
+:};
+
+
+
+//////////////////////////////////
+///// SYMBOLS DECLARATION
+/////////////////////////////////
+
+terminal T1, T2, T3, SEP;
+terminal String ID, NAME;
+terminal Integer INTEGER;
+terminal SQO, SQC, SC, EQ, CM;
+terminal INIT, DEFAULT;
+terminal WHEN, DO, DONE;
+terminal AND, OR, NOT, DOT, RO, RC;
+terminal PRINT;
+terminal String Q_STRING;
+terminal NEXT, CASE;
+
+
+non terminal prog, header, state_section,transition_section;
+non terminal t1_list, t2_list;
+
+non terminal state_list, state;
+non terminal HashMap<String,Integer> attr_list;
+non terminal String[] attr;
+non terminal String start_cmd;
+non terminal String when_list, when_cmd;
+non terminal String[] print_case_list, print_case_cmd;
+non terminal String[] print_cmd, case_cmd;
+non terminal Boolean expr;
+non terminal Integer scalar;
+
+non terminal String[] SHIFT0;
+
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left EQ;
+
+
+
+//////////////////////////////////
+///// GRAMMAR
+/////////////////////////////////
+
+start with prog;
+
+prog ::= header SEP state_section SEP transition_section     {: System.out.println("PROG RECOGNIZED!"); :}
+;
+
+header ::=  t2_list t1_list
+          | t2_list t1_list T3 T3
+          | t2_list t1_list T3 T3 T3 T3
+          | T1 T3 T3 T3
+          | T3 T1 T3 T3
+          | T3 T3 T1 T3
+          | T3 T3 T3 T1
+;
+
+t2_list ::=  T2 T2
+           | t2_list T2
+;
+
+t1_list ::=   T1
+            | t1_list T1 T1
+;
+
+state_section ::= state_list
+;
+
+state_list ::= state state state
+              |state_list state state
+;
+
+state ::= ID:id EQ SQO attr_list:hmap SQC SC {: parser.sym.put(id,hmap); :}
+;
+
+attr_list ::=   attr:val {: HashMap<String,Integer> hmap = new HashMap<String,Integer>();
+                            hmap.put(val[0],new Integer(val[1]));
+                            RESULT = hmap;
+                         :}
+              | attr_list:hmap CM attr:val {:  hmap.put(val[0],new Integer(val[1]));
+                                               RESULT = hmap;
+                                           :}
+;
+
+attr ::= NAME:name EQ INTEGER:val {: RESULT = new String[2];
+                                     RESULT[0] = name;
+                                     RESULT[1] = val.toString();
+                                  :}
+;
+
+transition_section ::=  start_cmd when_list
+;
+
+start_cmd ::=   INIT ID:state SC  {: RESULT = state; :}
+              | DEFAULT SC        {: RESULT = new String("S0"); :}
+;
+
+when_list ::=   when_cmd:state           {: RESULT = state; :}
+              | when_list when_cmd:state {: RESULT = state; :}
+;
+
+when_cmd ::= WHEN expr DO SHIFT0 print_case_list:state DONE SC {: RESULT = state[1]; :}
+;
+
+SHIFT0 ::= {: RESULT = new String[2];
+              Boolean exec = (Boolean)parser.stack(-1);
+
+              if(exec)
+                RESULT[0] = new String("1");
+              else
+                RESULT[0] = new String("0");
+
+              String state = (String)parser.stack(-3);
+              RESULT[1] = state;
+           :}
+;
+
+print_case_list ::=   print_case_cmd:state                 {: RESULT = state; :}
+                    | print_case_list print_case_cmd:state {: RESULT = state; :}
+;
+
+print_case_cmd ::=    print_cmd:state {: RESULT = state; :}
+                    | case_cmd:state  {: RESULT = state; :}
+;
+
+print_cmd ::= PRINT Q_STRING:s SC {: String[] state = (String[])parser.stack(-3);
+                                     if(state[0].equals("1"))
+                                        System.out.println(s);
+
+                                     RESULT = state;
+                                  :}
+;
+
+case_cmd ::= CASE ID:c NEXT ID:a SC {: String[] state = (String[])parser.stack(-5);
+                                       if(state[0].equals("1") && c.equals(state[1])){
+                                          System.out.println(a);
+                                          state[1] = a; //set the new state;
+                                       }
+
+                                     RESULT = state;
+                                  :}
+;
+
+
+expr ::=  scalar:a EQ EQ scalar:b   {: if(a.equals(b))
+                                          RESULT = new Boolean(true);
+                                       else
+                                          RESULT = new Boolean(false);
+                                    :}
+        | expr:a AND expr:b         {: RESULT = a & b; :}
+        | expr:a OR expr:b          {: RESULT = a | b; :}
+        | NOT expr:a                {: RESULT = !a; :}
+        | RO expr:a RC              {: RESULT = a; :}
+;
+
+scalar ::=  ID:id DOT NAME:attr  {: RESULT = (parser.sym.get(id)).get(attr); :}
+          | INTEGER:val          {: RESULT = val; :}
+;
